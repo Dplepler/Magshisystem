@@ -34,7 +34,7 @@ void MyFs::create_file(std::string path_str, bool directory) {
 	
 	char buffer[2];
 
-
+	if (file_already_exists(path_str.c_str()))
 
 	/* Iterate through all the data available, and find an empty block to start the file from */
 	for (unsigned int i = 0; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
@@ -70,13 +70,12 @@ Output: True if filename was found, otherwise false
 */
 bool MyFs::file_already_exists(char* filename) {
 
-	char buffer[MAX_FILENAME_LENGTH + 1];
+	inode_t inode;
 
-	for (unsigned int i = 0; i < DATA_OFFSET; i += INODE_ENTRY_SIZE) {
+	for (unsigned int i = 0; i < DATA_OFFSET; i += sizeof(inode_t)) {
 
-		this->blkdevsim->read(i, MAX_FILENAME_LENGTH, buffer);
-		buffer[MAX_FILENAME_LENGTH] = '\0';
-		if (!strcmp(buffer, filename)) {
+		this->blkdevsim->read(i, sizeof(inode), &(char*)inode);
+		if (!strcmp(inode.filename, filename)) {
 			return true;
 		}
 	}

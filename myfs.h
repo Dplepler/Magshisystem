@@ -15,9 +15,6 @@ typedef char type_t;
 #define BLOCK_DEVICE_SIZE 1024 * 1024
 #define BLOCK_SIZE 256
 
-// Size of each entry - contains the name of the file (11 bytes), if it's a directory or file (1 byte), first block offset of file (2 bytes)
-#define INODE_ENTRY_SIZE 14 
-
 #include <memory>
 #include <vector>
 #include <stdint.h>
@@ -119,14 +116,14 @@ private:
 		char filename[MAX_FILENAME_LENGTH + 1];
 		type_t type;
 		unsigned int position;
-	} inode;
+	} inode_t;
 
 	typedef struct FOLDER_STRUCT {
 
 		std::vector<inode> files_entries;
 		size_t file_count;
 
-	} folder;
+	} folder_t;
 
 
 
