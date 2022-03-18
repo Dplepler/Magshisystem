@@ -6,12 +6,23 @@ typedef char type_t;
 #define DIR 'D'
 #define FILE 'F'
 
+#define DATA_OFFSET 1024 	 // This is where the data starts in our block device
+
+#define EOF 0xFFFF 			// End of file signature
+
+#define MAX_FILENAME_LENGTH 10
+
+#define BLOCK_DEVICE_SIZE 1024 * 1024
+#define BLOCK_SIZE 256
+
+// Size of each entry - contains the name of the file (11 bytes), if it's a directory or file (1 byte), first block offset of file (2 bytes)
+#define INODE_ENTRY_SIZE 14 
+
 #include <memory>
 #include <vector>
 #include <stdint.h>
 #include "blkdev.h"
 
-#define MAX_FILENAME_LENGTH 10
 
 class MyFs {
 public:
@@ -86,6 +97,8 @@ public:
 	 */
 	dir_list list_dir(std::string path_str);
 
+	static bool file_already_exists(char* filename);
+
 private:
 
 	/**
@@ -105,12 +118,12 @@ private:
 
 		char filename[MAX_FILENAME_LENGTH + 1];
 		type_t type;
-		unsigned int pos;
+		unsigned int position;
 	} inode;
 
 	typedef struct FOLDER_STRUCT {
 
-		std::vector<inode> files;
+		std::vector<inode> files_entries;
 		size_t file_count;
 
 	} folder;

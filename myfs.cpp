@@ -31,7 +31,21 @@ void MyFs::format() {
 }
 
 void MyFs::create_file(std::string path_str, bool directory) {
-	throw std::runtime_error("not implemented");
+	
+	char buffer[2];
+
+
+
+	/* Iterate through all the data available, and find an empty block to start the file from */
+	for (unsigned int i = 0; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
+
+		if (this->blkdevsim->read(i, sizeof(bool), buffer) {
+
+		}
+
+	}
+
+
 }
 
 std::string MyFs::get_content(std::string path_str) {
@@ -47,5 +61,26 @@ MyFs::dir_list MyFs::list_dir(std::string path_str) {
 	dir_list ans;
 	throw std::runtime_error("not implemented");
 	return ans;
+}
+
+/*
+file_already_exists checks if a filename already exists in the current block device
+Input: Filename to search for
+Output: True if filename was found, otherwise false
+*/
+bool MyFs::file_already_exists(char* filename) {
+
+	char buffer[MAX_FILENAME_LENGTH + 1];
+
+	for (unsigned int i = 0; i < DATA_OFFSET; i += INODE_ENTRY_SIZE) {
+
+		this->blkdevsim->read(i, MAX_FILENAME_LENGTH, buffer);
+		buffer[MAX_FILENAME_LENGTH] = '\0';
+		if (!strcmp(buffer, filename)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
