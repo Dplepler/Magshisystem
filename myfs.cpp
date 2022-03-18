@@ -5,6 +5,7 @@
 #include <sstream>
 
 const char *MyFs::MYFS_MAGIC = "MYFS";
+static const unsigned short END_OF_FILE = 0xFFFF; 		// End of file signature
 
 MyFs::MyFs(BlockDeviceSimulator *blkdevsim_):blkdevsim(blkdevsim_) {
 	struct myfs_header header;
@@ -29,6 +30,7 @@ void MyFs::format() {
 
 	folder_t folder;
 	this->blkdevsim->write(sizeof(myfs_header), sizeof(folder_t), (const char*)&folder);
+	
 }
 
 void MyFs::create_file(std::string path_str, bool directory) {
@@ -39,8 +41,8 @@ void MyFs::create_file(std::string path_str, bool directory) {
 
 	inode_t new_file_entry;
 
-	this->blkdevsim->write(position, sizeof(bool), "1"); 				// Make sure to mark the block as occupied 
-	this->blkdevsim->write(position + 1, sizeof(short), END_OF_FILE); 	// Specify that the new block is the current end of the file
+	this->blkdevsim->write(position, sizeof(bool), "\1"); 						// Make sure to mark the block as occupied 
+	this->blkdevsim->write(position + 1, sizeof(short), (char*)&END_OF_FILE); 	// Specify that the new block is the current end of the file
 
 	/* Set inode parameters */
 	strcpy(new_file_entry.filename, path_str.c_str()); 					// Copy file name to the new node
@@ -60,7 +62,8 @@ std::string MyFs::get_content(std::string path_str) {
 	
 	std::string contents = "";
 
-	char buffer[BLOCK_SIZE + 1] = { 0 };
+	char buffer[BLOCK_SIZE - BLOCK_INFO_LENGTH + 1] = { 0 };
+	unsigned short index_buffer;
 
 	inode_t inode = get_file_inode(path_str.c_str());
 
@@ -68,23 +71,23 @@ std::string MyFs::get_content(std::string path_str) {
 	unsigned int position = inode.position;
 
 	/* Go through all the file's blocks and concatenate their contents into one string */
-	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
+	for (unsigned int i = 0; i < (BLOCK_DEVICE_SIZE - DATA_OFFSET) / BLOCK_SIZE; i++) {
 
-		this->blkdevsim->read(position, BLOCK_SIZE, buffer);
-		buffer[BLOCK_SIZE] = '\0';
+		this->blkdevsim->read(position + BLOCK_INFO_LENGTH, BLOCK_SIZE, buffer);
+		buffer[BLOCK_SIZE - BLOCK_INFO_LENGTH] = '\0';
 
 		block = std::string(buffer);
 
-		std::cout << block << std::endl;
-
-		contents += std::string(block.substr(BLOCK_INFO_LENGTH + 1)); 	// Concatenate file contents
+		contents += block; 			// Concatenate file contents
 
 		/* exit loop if we reached EOF */
-		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) == END_OF_FILE) { 	
+		this->blkdevsim->read(position + 1, sizeof(short), (char*)&index_buffer);
+
+		if (index_buffer == END_OF_FILE) { 
 			break;
 		} 
 		
-		position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
+		position = index_buffer;
 	} 
 
 	return contents;
@@ -102,16 +105,20 @@ void MyFs::set_content(std::string path_str, std::string content) {
 
 	while (content.length() > 0) {
 
+		this->blkdevsim->write(position, sizeof(bool), "\1"); 
+
 		this->blkdevsim->write(position + BLOCK_INFO_LENGTH, 
 			content.length() > CONTENT_LENGTH ? 
-			CONTENT_LENGTH : content.length(), content.substr(0, CONTENT_LENGTH).c_str());
+			CONTENT_LENGTH : content.length(), content.length() > CONTENT_LENGTH ? content.substr(0, CONTENT_LENGTH).c_str() : content.c_str());
 
 		// Take out all the content we already added, if this was the last bit of text, we can make content equal nothing
-		content = content.length() > CONTENT_LENGTH ? content.substr(CONTENT_LENGTH, content.length()) : ""; 	
+		content = content.length() > CONTENT_LENGTH ? content.substr(CONTENT_LENGTH) : ""; 	
 
 		new_pos = find_free_block();
+		
+		this->blkdevsim->write(position + 1, sizeof(short), content == "" ? (char*)&END_OF_FILE : (char*)&new_pos);
 
-		this->blkdevsim->write(position, sizeof(short), std::to_string(new_pos).c_str());
+		position = new_pos;
 	}
 }
 
@@ -130,8 +137,6 @@ bool MyFs::file_already_exists(const char* filename) {
 	folder_t folder = get_folder();
 
 	size_t length = folder.file_entries.size();
-
-	std::cout << length;
 
 	/* Find file inode */
 	for (unsigned int i = 0; i < length; i++) {
@@ -160,40 +165,38 @@ MyFs::inode_t MyFs::get_file_inode(const char* path_str) {
 
 void MyFs::reset_contents(unsigned int position) {
 
-	char buffer[sizeof(short) + 1];
+	unsigned short buffer;
+
 
 	/* Go through all the file's blocks and reset their content */
 	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
 
-		this->blkdevsim->write(position, sizeof(bool), "0");
+		this->blkdevsim->write(position, sizeof(bool), 0);
 
-		this->blkdevsim->read(position + 1, sizeof(short), buffer);
-		buffer[sizeof(short)] = '\0';
+		this->blkdevsim->read(position + 1, sizeof(short), (char*)&buffer);
 
 		/* exit loop if we reached EOF */
-		if (!strcmp(buffer, END_OF_FILE)) {
+		if (buffer == END_OF_FILE) {
 			break;
 		} 
 		
-		position = std::stoul(buffer);
+		position = buffer;
 	} 
 }
 
 unsigned int MyFs::find_free_block() {
 
 	unsigned int position = 0;
-	char buffer[2];
+	char buffer;
 
 	/* Iterate through all the data available, and find an empty block */
 	for (unsigned int i = DATA_OFFSET; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
 
-		this->blkdevsim->read(i, 1, buffer);
-		buffer[1] = '\0';
-
-		std::cout << buffer << std::endl;
+		this->blkdevsim->read(i, sizeof(bool), (char*)&buffer);
 
 		// Check if an empty block was found - if so, break out of the loop and use it
-		if (!buffer[0]) { position = i; break; }
+		if (buffer == '\0') { position = i; break; }
+
 	}
 
 	// If we couldn't find even 1 free block, exit
@@ -236,4 +239,3 @@ MyFs::folder_t MyFs::get_folder() {
 
 	return folder;
 }
-

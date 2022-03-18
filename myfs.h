@@ -1,16 +1,16 @@
 #ifndef __MYFS_H__
 #define __MYFS_H__
 
-#define DATA_OFFSET 2048 	 	// This is where the data starts in our block device
-
-#define END_OF_FILE "0xFFFF" 	// End of file signature
+#define DATA_OFFSET 2048 	 		// This is where the data starts in our block device
 
 #define MAX_FILENAME_LENGTH 10
 
 #define BLOCK_DEVICE_SIZE 1024 * 1024
 #define BLOCK_SIZE 256
 
-#define BLOCK_INFO_LENGTH 3 	// Offset of data block that is reserved for params: Occupied(1 byte), next block(2 bytes)
+#define BLOCK_INFO_LENGTH 3 	// Offset of data block that is reserved for params: Occupied(1 byte), next block(6 bytes)
+
+
 
 #define CONTENT_LENGTH BLOCK_SIZE - BLOCK_INFO_LENGTH
 
