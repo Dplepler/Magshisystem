@@ -27,16 +27,15 @@ void MyFs::format() {
 	header.version = CURR_VERSION;
 	blkdevsim->write(0, sizeof(header), (const char*)&header);
 
-	// TODO: put your format code here
+	folder_t folder;
+	this->blkdevsim->write(sizeof(myfs_header), sizeof(folder_t), (const char*)&folder);
 }
 
 void MyFs::create_file(std::string path_str, bool directory) {
 
 	if (file_already_exists(path_str.c_str())) { throw std::runtime_error("Filename already exists"); }
 
-	char buffer[2];
-
-	unsigned int position = find_free_block()
+	unsigned int position = find_free_block();
 
 	inode_t new_file_entry;
 
@@ -44,17 +43,17 @@ void MyFs::create_file(std::string path_str, bool directory) {
 	this->blkdevsim->write(position + 1, sizeof(short), END_OF_FILE); 	// Specify that the new block is the current end of the file
 
 	/* Set inode parameters */
-	strcpy(new_file_entry.filename, path_str.c_str()); 				// Copy file name to the new node
+	strcpy(new_file_entry.filename, path_str.c_str()); 					// Copy file name to the new node
 	new_file_entry.type = directory ? 'D' : 'F'; 								
 	new_file_entry.position = position;
+	std:: cout << new_file_entry.filename << std::endl;
 
 	/* Add file to the root directory */
-	folder_t root;
-	this->blkdevsim->read(sizeof(struct myfs_header), sizeof(folder_t), (char*)&root); 		// The root directory starts after the file header
+	folder_t root = get_folder();
+	
+	root.file_entries.push_back(new_file_entry);		// Push data onto root directory buffer
 
-	root.file_entries.push_back(new_file_entry); 											// Push data onto root directory buffer
-
-	this->blkdevsim->write(sizeof(struct myfs_header), sizeof(folder_t), (char*)&root); 	// Write data back to the root directory
+	write_folder(root); 								// Write data back to the root directory
 }
 
 std::string MyFs::get_content(std::string path_str) {
@@ -75,6 +74,8 @@ std::string MyFs::get_content(std::string path_str) {
 		buffer[BLOCK_SIZE] = '\0';
 
 		block = std::string(buffer);
+
+		std::cout << block << std::endl;
 
 		contents += std::string(block.substr(BLOCK_INFO_LENGTH + 1)); 	// Concatenate file contents
 
@@ -103,7 +104,7 @@ void MyFs::set_content(std::string path_str, std::string content) {
 
 		this->blkdevsim->write(position + BLOCK_INFO_LENGTH, 
 			content.length() > CONTENT_LENGTH ? 
-			CONTENT_LENGTH : content.length(), content.substr(0, CONTENT_LENGTH));
+			CONTENT_LENGTH : content.length(), content.substr(0, CONTENT_LENGTH).c_str());
 
 		// Take out all the content we already added, if this was the last bit of text, we can make content equal nothing
 		content = content.length() > CONTENT_LENGTH ? content.substr(CONTENT_LENGTH, content.length()) : ""; 	
@@ -116,10 +117,7 @@ void MyFs::set_content(std::string path_str, std::string content) {
 
 MyFs::folder_t MyFs::list_dir(std::string path_str) {
 	
-	folder_t root;
-	this->blkdevsim->read(sizeof(struct myfs_header), sizeof(folder_t), (char*)&root);
-
-	return root;
+	return get_folder();
 }
 
 /*
@@ -129,27 +127,31 @@ Output: True if filename was found, otherwise false
 */
 bool MyFs::file_already_exists(const char* filename) {
 
-	folder_t folder;
-	this->blkdevsim->read(sizeof(myfs_header), sizeof(folder_t), (char*)&folder); 	// Get root folder
+	folder_t folder = get_folder();
+
 	size_t length = folder.file_entries.size();
+
+	std::cout << length;
 
 	/* Find file inode */
 	for (unsigned int i = 0; i < length; i++) {
-		if (!strcmp(folder.file_entries[i].filename, path_str.c_str())) { return true; }
+		if (!strcmp(folder.file_entries[i].filename, filename)) { return true; }
 	}
 
+	
 	return false;
 }
 
-inode_t MyFs::get_file_inode(char* path_str) {
+MyFs::inode_t MyFs::get_file_inode(const char* path_str) {
 
-	folder_t folder;
-	this->blkdevsim->read(sizeof(myfs_header), sizeof(folder_t), (char*)&folder); 	// Get root folder
+	folder_t folder = get_folder();
+	
 	size_t length = folder.file_entries.size();
+
 
 	/* Find file inode */
 	for (unsigned int i = 0; i < length; i++) {
-		if (!strcmp(folder.file_entries[i].filename, path_str.c_str())) { return folder.file_entries[i]; }
+		if (!strcmp(folder.file_entries[i].filename, path_str)) { return folder.file_entries[i]; }
 	}
 
 	// If the file was not found..
@@ -158,17 +160,22 @@ inode_t MyFs::get_file_inode(char* path_str) {
 
 void MyFs::reset_contents(unsigned int position) {
 
+	char buffer[sizeof(short) + 1];
+
 	/* Go through all the file's blocks and reset their content */
 	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
 
 		this->blkdevsim->write(position, sizeof(bool), "0");
 
+		this->blkdevsim->read(position + 1, sizeof(short), buffer);
+		buffer[sizeof(short)] = '\0';
+
 		/* exit loop if we reached EOF */
-		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) == END_OF_FILE) { 	
+		if (!strcmp(buffer, END_OF_FILE)) {
 			break;
 		} 
 		
-		position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
+		position = std::stoul(buffer);
 	} 
 }
 
@@ -180,11 +187,13 @@ unsigned int MyFs::find_free_block() {
 	/* Iterate through all the data available, and find an empty block */
 	for (unsigned int i = DATA_OFFSET; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
 
-		this->blkdevsim->read(i, sizeof(bool), buffer);
+		this->blkdevsim->read(i, 1, buffer);
 		buffer[1] = '\0';
 
+		std::cout << buffer << std::endl;
+
 		// Check if an empty block was found - if so, break out of the loop and use it
-		if (!strcmp(buffer, "0")) { position = i; break; }
+		if (!buffer[0]) { position = i; break; }
 	}
 
 	// If we couldn't find even 1 free block, exit
@@ -192,3 +201,39 @@ unsigned int MyFs::find_free_block() {
 
 	return position;
 }
+
+void MyFs::write_folder(folder_t folder) {
+
+	size_t length = folder.file_entries.size();
+
+	unsigned int position = sizeof(myfs_header); 	// Start position
+
+	for (unsigned int i = 0; i < length; i++, position += sizeof(inode_t)) {
+
+		this->blkdevsim->write(position, sizeof(inode_t), (char*)&folder.file_entries[i]);
+		
+	}
+
+}
+
+MyFs::folder_t MyFs::get_folder() {
+
+	folder_t folder;
+	inode_t inode;
+	char buffer [1];
+
+	unsigned int position = sizeof(myfs_header);
+
+	for (unsigned int i = 0; i < DATA_OFFSET; i++, position += sizeof(inode_t)) {
+
+		this->blkdevsim->read(position, 1, buffer);
+		if (!buffer[0]) { break; }
+
+		this->blkdevsim->read(position, sizeof(inode_t), (char*)&inode);
+
+		folder.file_entries.push_back(inode);
+	}
+
+	return folder;
+}
+

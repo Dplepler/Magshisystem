@@ -25,6 +25,18 @@ public:
 	MyFs(BlockDeviceSimulator *blkdevsim_);
 
 
+	typedef struct FOLDER_NODE_STRUCT {
+
+		char filename[MAX_FILENAME_LENGTH + 1];
+		char type;
+		unsigned int position;
+	} inode_t;
+
+	typedef struct FOLDER_STRUCT {
+		std::vector<inode_t> file_entries;
+		
+	} folder_t;
+
 	/**
 	 * format method
 	 * This function discards the current content in the blockdevice and
@@ -69,12 +81,15 @@ public:
 	 * @return a vector of dir_list_entry structures, one for each file in
 	 *	the directory.
 	 */
-	dir_list list_dir(std::string path_str);
+	folder_t list_dir(std::string path_str);
 
 	bool file_already_exists(const char* filename);
-	inode_t get_file_inode(char* path_str);
+	inode_t get_file_inode(const char* path_str);
 	void reset_contents(unsigned int position);
 	unsigned int find_free_block();
+	void write_folder(folder_t folder);
+	folder_t get_folder();
+
 
 private:
 
@@ -90,19 +105,6 @@ private:
 		char magic[4];
 		uint8_t version;
 	};
-
-	typedef struct FOLDER_NODE_STRUCT {
-
-		char filename[MAX_FILENAME_LENGTH + 1];
-		char type;
-		unsigned int position;
-	} inode_t;
-
-	typedef struct FOLDER_STRUCT {
-
-		std::vector<inode_t> file_entries;
-		
-	} folder_t;
 
 
 
