@@ -78,7 +78,6 @@ std::string MyFs::get_content(std::string path_str) {
 	bool found;
 	inode_t inode;
 	
-
 	// Find file inode
 	for (unsigned int i = sizeof(struct myfs_header); i < DATA_OFFSET; i += sizeof(inode_t)) {
 
@@ -92,7 +91,7 @@ std::string MyFs::get_content(std::string path_str) {
 	std::string block;
 	unsigned int position = inode.position;
 
-	do {
+	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
 
 		this->blkdevsim->read(position, BLOCK_SIZE, buffer);
 		buffer[BLOCK_SIZE] = '\0';
@@ -101,16 +100,15 @@ std::string MyFs::get_content(std::string path_str) {
 
 		contents += std::string(block.substr(BLOCK_INFO_LENGTH + 1)); 	// Concatenate file contents
 
-		/* If we didn't reach EOF, continue to the next block */
-		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) != END_OF_FILE) { 	
-
-			position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
-
+		/* If we didn't reach EOF, continue to the next block, otherwise exit loop */
+		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) == END_OF_FILE) { 	
+			break;
 		}
+		
+		position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
+	} 
 
-	}
-
-	std::cout << contents << std::endl;
+	return contents;
 }
 
 void MyFs::set_content(std::string path_str, std::string content) {
