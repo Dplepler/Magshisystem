@@ -31,24 +31,12 @@ void MyFs::format() {
 }
 
 void MyFs::create_file(std::string path_str, bool directory) {
-	
-	unsigned int position = 0;
-	char buffer[2];
 
 	if (file_already_exists(path_str.c_str())) { throw std::runtime_error("Filename already exists"); }
 
-	/* Iterate through all the data available, and find an empty block to start the file from */
-	for (unsigned int i = DATA_OFFSET; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
+	char buffer[2];
 
-		this->blkdevsim->read(i, sizeof(bool), buffer);
-		buffer[1] = '\0';
-
-		// Check if an empty block was found - if so, break out of the loop and use it
-		if (!strcmp(buffer, "0")) { position = i; break; }
-	}
-
-	// If we couldn't find even 1 free block, exit
-	if (!position) { throw std::runtime_error("Not enough disk space!"); }
+	unsigned int position = find_free_block()
 
 	inode_t new_file_entry;
 
@@ -73,24 +61,14 @@ std::string MyFs::get_content(std::string path_str) {
 	
 	std::string contents = "";
 
-	char buffer[BLOCK_SIZE] = { 0 };
+	char buffer[BLOCK_SIZE + 1] = { 0 };
 
-	bool found;
-	inode_t inode;
-	
-	// Find file inode
-	for (unsigned int i = sizeof(struct myfs_header); i < DATA_OFFSET; i += sizeof(inode_t)) {
-
-		this->blkdevsim->read(i, sizeof(inode), (char*)&inode);
-		if (!strcmp(inode.filename, path_str.c_str())) { found = true; break; }
-	}
-
-	// If file was not found..
-	if (!found) { throw std::runtime_error("File does not exist"); }
+	inode_t inode = get_file_inode(path_str.c_str());
 
 	std::string block;
 	unsigned int position = inode.position;
 
+	/* Go through all the file's blocks and concatenate their contents into one string */
 	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
 
 		this->blkdevsim->read(position, BLOCK_SIZE, buffer);
@@ -100,10 +78,10 @@ std::string MyFs::get_content(std::string path_str) {
 
 		contents += std::string(block.substr(BLOCK_INFO_LENGTH + 1)); 	// Concatenate file contents
 
-		/* If we didn't reach EOF, continue to the next block, otherwise exit loop */
+		/* exit loop if we reached EOF */
 		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) == END_OF_FILE) { 	
 			break;
-		}
+		} 
 		
 		position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
 	} 
@@ -112,13 +90,36 @@ std::string MyFs::get_content(std::string path_str) {
 }
 
 void MyFs::set_content(std::string path_str, std::string content) {
-	throw std::runtime_error("not implemented");
+	
+	inode_t inode = get_file_inode(path_str.c_str());
+	std::string block;
+	
+	this->reset_contents(inode.position); 	// Reset and clear all data
+
+	unsigned int position = inode.position;
+	unsigned int new_pos = 0;
+
+	while (content.length() > 0) {
+
+		this->blkdevsim->write(position + BLOCK_INFO_LENGTH, 
+			content.length() > CONTENT_LENGTH ? 
+			CONTENT_LENGTH : content.length(), content.substr(0, CONTENT_LENGTH));
+
+		// Take out all the content we already added, if this was the last bit of text, we can make content equal nothing
+		content = content.length() > CONTENT_LENGTH ? content.substr(CONTENT_LENGTH, content.length()) : ""; 	
+
+		new_pos = find_free_block();
+
+		this->blkdevsim->write(position, sizeof(short), std::to_string(new_pos).c_str());
+	}
 }
 
-MyFs::dir_list MyFs::list_dir(std::string path_str) {
-	dir_list ans;
-	throw std::runtime_error("not implemented");
-	return ans;
+MyFs::folder_t MyFs::list_dir(std::string path_str) {
+	
+	folder_t root;
+	this->blkdevsim->read(sizeof(struct myfs_header), sizeof(folder_t), (char*)&root);
+
+	return root;
 }
 
 /*
@@ -128,16 +129,66 @@ Output: True if filename was found, otherwise false
 */
 bool MyFs::file_already_exists(const char* filename) {
 
-	inode_t inode;
+	folder_t folder;
+	this->blkdevsim->read(sizeof(myfs_header), sizeof(folder_t), (char*)&folder); 	// Get root folder
+	size_t length = folder.file_entries.size();
 
-	for (unsigned int i = sizeof(struct myfs_header); i < DATA_OFFSET; i += sizeof(inode_t)) {
-
-		this->blkdevsim->read(i, sizeof(inode), (char*)&inode);
-		if (!strcmp(inode.filename, filename)) {
-			return true;
-		}
+	/* Find file inode */
+	for (unsigned int i = 0; i < length; i++) {
+		if (!strcmp(folder.file_entries[i].filename, path_str.c_str())) { return true; }
 	}
 
 	return false;
 }
 
+inode_t MyFs::get_file_inode(char* path_str) {
+
+	folder_t folder;
+	this->blkdevsim->read(sizeof(myfs_header), sizeof(folder_t), (char*)&folder); 	// Get root folder
+	size_t length = folder.file_entries.size();
+
+	/* Find file inode */
+	for (unsigned int i = 0; i < length; i++) {
+		if (!strcmp(folder.file_entries[i].filename, path_str.c_str())) { return folder.file_entries[i]; }
+	}
+
+	// If the file was not found..
+	throw std::runtime_error("File does not exist");
+}
+
+void MyFs::reset_contents(unsigned int position) {
+
+	/* Go through all the file's blocks and reset their content */
+	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
+
+		this->blkdevsim->write(position, sizeof(bool), "0");
+
+		/* exit loop if we reached EOF */
+		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) == END_OF_FILE) { 	
+			break;
+		} 
+		
+		position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
+	} 
+}
+
+unsigned int MyFs::find_free_block() {
+
+	unsigned int position = 0;
+	char buffer[2];
+
+	/* Iterate through all the data available, and find an empty block */
+	for (unsigned int i = DATA_OFFSET; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
+
+		this->blkdevsim->read(i, sizeof(bool), buffer);
+		buffer[1] = '\0';
+
+		// Check if an empty block was found - if so, break out of the loop and use it
+		if (!strcmp(buffer, "0")) { position = i; break; }
+	}
+
+	// If we couldn't find even 1 free block, exit
+	if (!position) { throw std::runtime_error("Not enough disk space!"); }
+
+	return position;
+}

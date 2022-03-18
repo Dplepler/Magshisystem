@@ -1,7 +1,7 @@
 #ifndef __MYFS_H__
 #define __MYFS_H__
 
-#define DATA_OFFSET 1024 	 	// This is where the data starts in our block device
+#define DATA_OFFSET 2048 	 	// This is where the data starts in our block device
 
 #define END_OF_FILE "0xFFFF" 	// End of file signature
 
@@ -11,6 +11,8 @@
 #define BLOCK_SIZE 256
 
 #define BLOCK_INFO_LENGTH 3 	// Offset of data block that is reserved for params: Occupied(1 byte), next block(2 bytes)
+
+#define CONTENT_LENGTH BLOCK_SIZE - BLOCK_INFO_LENGTH
 
 #include <memory>
 #include <vector>
@@ -22,28 +24,6 @@ class MyFs {
 public:
 	MyFs(BlockDeviceSimulator *blkdevsim_);
 
-	/**
-	 * dir_list_entry struct
-	 * This struct is used by list_dir method to return directory entry
-	 * information.
-	 */
-	struct dir_list_entry {
-		/**
-		 * The directory entry name
-		 */
-		std::string name;
-
-		/**
-		 * whether the entry is a file or a directory
-		 */
-		bool is_dir;
-
-		/**
-		 * File size
-		 */
-		int file_size;
-	};
-	typedef std::vector<struct dir_list_entry> dir_list;
 
 	/**
 	 * format method
@@ -92,6 +72,9 @@ public:
 	dir_list list_dir(std::string path_str);
 
 	bool file_already_exists(const char* filename);
+	inode_t get_file_inode(char* path_str);
+	void reset_contents(unsigned int position);
+	unsigned int find_free_block();
 
 private:
 
