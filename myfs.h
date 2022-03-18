@@ -1,14 +1,9 @@
 #ifndef __MYFS_H__
 #define __MYFS_H__
 
-typedef char type_t;
-
-#define DIR 'D'
-#define FILE 'F'
-
 #define DATA_OFFSET 1024 	 // This is where the data starts in our block device
 
-#define EOF 0xFFFF 			// End of file signature
+#define END_OF_FILE 0xFFFF 			// End of file signature
 
 #define MAX_FILENAME_LENGTH 10
 
@@ -94,7 +89,7 @@ public:
 	 */
 	dir_list list_dir(std::string path_str);
 
-	static bool file_already_exists(char* filename);
+	bool file_already_exists(const char* filename);
 
 private:
 
@@ -114,15 +109,14 @@ private:
 	typedef struct FOLDER_NODE_STRUCT {
 
 		char filename[MAX_FILENAME_LENGTH + 1];
-		type_t type;
+		char type;
 		unsigned int position;
 	} inode_t;
 
 	typedef struct FOLDER_STRUCT {
 
-		std::vector<inode> files_entries;
-		size_t file_count;
-
+		std::vector<inode_t> file_entries;
+		
 	} folder_t;
 
 
