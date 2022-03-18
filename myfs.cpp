@@ -40,7 +40,7 @@ void MyFs::create_file(std::string path_str, bool directory) {
 	}
 
 	/* Iterate through all the data available, and find an empty block to start the file from */
-	for (unsigned int i = 0; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
+	for (unsigned int i = DATA_OFFSET; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
 
 		this->blkdevsim->read(i, sizeof(bool), buffer);
 		buffer[1] = '\0';
@@ -56,7 +56,8 @@ void MyFs::create_file(std::string path_str, bool directory) {
 
 	inode_t new_file_entry;
 
-	this->blkdevsim->write(position, sizeof(bool), "1"); 	// Make sure to mark the block as occupied 
+	this->blkdevsim->write(position, sizeof(bool), "1"); 				// Make sure to mark the block as occupied 
+	this->blkdevsim->write(position + 1, sizeof(short), END_OF_FILE); 	// Specify that the new block is the current end of the file
 
 	/* Set inode parameters */
 	strcpy(new_file_entry.filename, path_str.c_str()); 				// Copy file name to the new node
@@ -73,8 +74,12 @@ void MyFs::create_file(std::string path_str, bool directory) {
 }
 
 std::string MyFs::get_content(std::string path_str) {
-	throw std::runtime_error("not implemented");
-	return "";
+	
+	std::string contents;
+	
+	return "";	
+
+
 }
 
 void MyFs::set_content(std::string path_str, std::string content) {
