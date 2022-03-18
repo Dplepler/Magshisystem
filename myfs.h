@@ -1,10 +1,17 @@
 #ifndef __MYFS_H__
 #define __MYFS_H__
 
+typedef char type_t;
+
+#define DIR 'D'
+#define FILE 'F'
+
 #include <memory>
 #include <vector>
 #include <stdint.h>
 #include "blkdev.h"
+
+#define MAX_FILENAME_LENGTH 10
 
 class MyFs {
 public:
@@ -93,6 +100,22 @@ private:
 		char magic[4];
 		uint8_t version;
 	};
+
+	typedef struct FOLDER_NODE_STRUCT {
+
+		char filename[MAX_FILENAME_LENGTH + 1];
+		type_t type;
+		unsigned int pos;
+	} inode;
+
+	typedef struct FOLDER_STRUCT {
+
+		std::vector<inode> files;
+		size_t file_count;
+
+	} folder;
+
+
 
 	BlockDeviceSimulator *blkdevsim;
 
