@@ -35,9 +35,7 @@ void MyFs::create_file(std::string path_str, bool directory) {
 	unsigned int position = 0;
 	char buffer[2];
 
-	if (file_already_exists(path_str.c_str())) {
-		throw std::runtime_error("Filename already exists");
-	}
+	if (file_already_exists(path_str.c_str())) { throw std::runtime_error("Filename already exists"); }
 
 	/* Iterate through all the data available, and find an empty block to start the file from */
 	for (unsigned int i = DATA_OFFSET; i < BLOCK_DEVICE_SIZE - DATA_OFFSET; i += BLOCK_SIZE) {
@@ -50,9 +48,7 @@ void MyFs::create_file(std::string path_str, bool directory) {
 	}
 
 	// If we couldn't find even 1 free block, exit
-	if (!position) {
-		throw std::runtime_error("Not enough disk space!");
-	}
+	if (!position) { throw std::runtime_error("Not enough disk space!"); }
 
 	inode_t new_file_entry;
 
@@ -75,11 +71,46 @@ void MyFs::create_file(std::string path_str, bool directory) {
 
 std::string MyFs::get_content(std::string path_str) {
 	
-	std::string contents;
+	std::string contents = "";
+
+	char buffer[BLOCK_SIZE] = { 0 };
+
+	bool found;
+	inode_t inode;
 	
-	return "";	
 
+	// Find file inode
+	for (unsigned int i = sizeof(struct myfs_header); i < DATA_OFFSET; i += sizeof(inode_t)) {
 
+		this->blkdevsim->read(i, sizeof(inode), (char*)&inode);
+		if (!strcmp(inode.filename, path_str.c_str())) { found = true; break; }
+	}
+
+	// If file was not found..
+	if (!found) { throw std::runtime_error("File does not exist"); }
+
+	std::string block;
+	unsigned int position = inode.position;
+
+	do {
+
+		this->blkdevsim->read(position, BLOCK_SIZE, buffer);
+		buffer[BLOCK_SIZE] = '\0';
+
+		block = std::string(buffer);
+
+		contents += std::string(block.substr(BLOCK_INFO_LENGTH + 1)); 	// Concatenate file contents
+
+		/* If we didn't reach EOF, continue to the next block */
+		if (block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1) != END_OF_FILE) { 	
+
+			position = std::stoul(block.substr(sizeof(bool), BLOCK_INFO_LENGTH - 1));
+
+		}
+
+	}
+
+	std::cout << contents << std::endl;
 }
 
 void MyFs::set_content(std::string path_str, std::string content) {
@@ -101,7 +132,7 @@ bool MyFs::file_already_exists(const char* filename) {
 
 	inode_t inode;
 
-	for (unsigned int i = 0; i < DATA_OFFSET; i += sizeof(inode_t)) {
+	for (unsigned int i = sizeof(struct myfs_header); i < DATA_OFFSET; i += sizeof(inode_t)) {
 
 		this->blkdevsim->read(i, sizeof(inode), (char*)&inode);
 		if (!strcmp(inode.filename, filename)) {
