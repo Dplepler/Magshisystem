@@ -30,6 +30,8 @@ public:
 		char filename[MAX_FILENAME_LENGTH + 1];
 		char type;
 		unsigned int position;
+		size_t size;
+
 	} inode_t;
 
 	typedef struct FOLDER_STRUCT {
@@ -83,13 +85,6 @@ public:
 	 */
 	folder_t list_dir(std::string path_str);
 
-	bool file_already_exists(const char* filename);
-	inode_t get_file_inode(const char* path_str);
-	void reset_contents(unsigned int position);
-	unsigned int find_free_block();
-	void write_folder(folder_t folder);
-	folder_t get_folder();
-
 
 private:
 
@@ -112,6 +107,20 @@ private:
 
 	static const uint8_t CURR_VERSION = 0x03;
 	static const char *MYFS_MAGIC;
+
+
+	bool file_already_exists(const char* filename);
+
+	inode_t get_file_inode(const char* path_str);
+	folder_t get_folder();
+
+	void reset_contents(unsigned int position);
+	void clear_block(unsigned int position);
+	void write_folder(folder_t folder);
+	void set_size(const char* filename, size_t new_size);
+
+	unsigned int find_free_block();
+
 };
 
 #endif // __MYFS_H__

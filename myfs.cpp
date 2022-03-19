@@ -33,6 +33,11 @@ void MyFs::format() {
 	
 }
 
+/*
+create_file creates a new file with a specified path
+Input: New file's path, a flag to decide if file will be a directory or not
+Output: None
+*/
 void MyFs::create_file(std::string path_str, bool directory) {
 
 	if (file_already_exists(path_str.c_str())) { throw std::runtime_error("Filename already exists"); }
@@ -58,6 +63,11 @@ void MyFs::create_file(std::string path_str, bool directory) {
 	write_folder(root); 								// Write data back to the root directory
 }
 
+/*
+get_content returns the data of a specified file
+Input: File path
+Output: Content of requested file
+*/
 std::string MyFs::get_content(std::string path_str) {
 	
 	std::string contents = "";
@@ -93,10 +103,21 @@ std::string MyFs::get_content(std::string path_str) {
 	return contents;
 }
 
+/*
+set_content assigns new given data to a specified file
+Input: File path, data to assign
+Output: None
+
+NOTE: OLD DATA WILL BE DELETED AND REPLACED
+
+*/
 void MyFs::set_content(std::string path_str, std::string content) {
 	
-	inode_t inode = get_file_inode(path_str.c_str());
+	inode_t inode = this->get_file_inode(path_str.c_str());
 	std::string block;
+	bool clear = false;
+
+	this->set_size(path_str.c_str(), content.length());
 	
 	this->reset_contents(inode.position); 	// Reset and clear all data
 
@@ -105,11 +126,15 @@ void MyFs::set_content(std::string path_str, std::string content) {
 
 	while (content.length() > 0) {
 
+		clear = CONTENT_LENGTH > content.length();
+
+		if (clear) { this->clear_block(position); }
+
 		this->blkdevsim->write(position, sizeof(bool), "\1"); 
 
 		this->blkdevsim->write(position + BLOCK_INFO_LENGTH, 
-			content.length() > CONTENT_LENGTH ? 
-			CONTENT_LENGTH : content.length(), content.length() > CONTENT_LENGTH ? content.substr(0, CONTENT_LENGTH).c_str() : content.c_str());
+			!clear ? CONTENT_LENGTH : content.length(),
+			!clear ? content.substr(0, CONTENT_LENGTH).c_str() : content.c_str());
 
 		// Take out all the content we already added, if this was the last bit of text, we can make content equal nothing
 		content = content.length() > CONTENT_LENGTH ? content.substr(CONTENT_LENGTH) : ""; 	
@@ -122,6 +147,11 @@ void MyFs::set_content(std::string path_str, std::string content) {
 	}
 }
 
+/*
+list_dir returns all the files in the current folder
+Input: I have no idea why we need path_str 
+Output: Folder that contains all the paths
+*/
 MyFs::folder_t MyFs::list_dir(std::string path_str) {
 	
 	return get_folder();
@@ -147,6 +177,11 @@ bool MyFs::file_already_exists(const char* filename) {
 	return false;
 }
 
+/*
+get_file_inode returns the inode that represents a given filename
+Input: File path to get the inode of
+Output: The inode of the requested file
+*/
 MyFs::inode_t MyFs::get_file_inode(const char* path_str) {
 
 	folder_t folder = get_folder();
@@ -163,10 +198,14 @@ MyFs::inode_t MyFs::get_file_inode(const char* path_str) {
 	throw std::runtime_error("File does not exist");
 }
 
+/*
+reset_contents clears all the data of a specified file
+Input: The position of the first block in memory
+Output: None
+*/
 void MyFs::reset_contents(unsigned int position) {
 
 	unsigned short buffer;
-
 
 	/* Go through all the file's blocks and reset their content */
 	for (unsigned int i = DATA_OFFSET; i < (BLOCK_DEVICE_SIZE / BLOCK_SIZE) - DATA_OFFSET; i++) {
@@ -184,6 +223,11 @@ void MyFs::reset_contents(unsigned int position) {
 	} 
 }
 
+/*
+find_free_block returns an unused block of data
+Input: None
+Output: The position of the free block, error if there's not enough disk space
+*/
 unsigned int MyFs::find_free_block() {
 
 	unsigned int position = 0;
@@ -205,6 +249,11 @@ unsigned int MyFs::find_free_block() {
 	return position;
 }
 
+/*
+write_folder writes a given folder and replaces the root with it
+Input: New folder to write to the root directory memory
+Output: None
+*/
 void MyFs::write_folder(folder_t folder) {
 
 	size_t length = folder.file_entries.size();
@@ -219,6 +268,11 @@ void MyFs::write_folder(folder_t folder) {
 
 }
 
+/*
+get_folder get's all the inodes at the root directory into a folder and returns it
+Input: None
+Output: The contents of the root directory
+*/
 MyFs::folder_t MyFs::get_folder() {
 
 	folder_t folder;
@@ -238,4 +292,38 @@ MyFs::folder_t MyFs::get_folder() {
 	}
 
 	return folder;
+}
+
+
+/*
+clear_block clears the whole block and resets it's data to 0
+Input: Start of block position
+Output: None
+*/
+void MyFs::clear_block(unsigned int position) {
+
+	char data[BLOCK_SIZE] = { '\0' };
+	this->blkdevsim->write(position, BLOCK_SIZE, data);
+}
+
+
+/*
+set_size replaces an inode's size with a new one
+Input: Inode's filename, new size
+Output: None
+*/
+void MyFs::set_size(const char* filename, size_t new_size) {
+
+	folder_t folder = get_folder();
+	size_t length = folder.file_entries.size();
+
+	/* Find the inode and replace it's size */
+	for (unsigned int i = 0; i < length; i++) {
+
+		if (!strcmp(filename, folder.file_entries[i].filename)) {
+			folder.file_entries[i].size = new_size;
+		}
+	}
+
+	this->write_folder(folder);
 }

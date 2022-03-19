@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 					std::cout << std::setw(15) << std::left
 						<< std::string(dlist.file_entries[i].filename) + (dlist.file_entries[i].type == 'D' ? "/":"")
 						<< std::setw(10) << std::right
-						<< dlist.file_entries.size() << std::endl;
+						<< dlist.file_entries[i].size << std::endl;
 				}
 			} else if (cmd[0] == EXIT_CMD) {
 				exit = true;
